@@ -328,6 +328,10 @@ function formatarTamanho(int $bytes): string {
 <div class="notificacao" id="notificacao"></div>
 
 <script>
+// ============================================================
+//  SUBSTITUIR o bloco <script> em documentos.php por este
+// ============================================================
+
 const inputFicheiro = document.getElementById('input-ficheiro');
 const zonaUpload    = document.getElementById('zona-upload');
 const ficheiroInfo  = document.getElementById('ficheiro-info');
@@ -352,25 +356,25 @@ inputFicheiro.addEventListener('change', () => {
 function processarFicheiro(ficheiro) {
     const tiposPermitidos = ['application/pdf', 'text/plain'];
     const maxBytes = <?= TAMANHO_MAXIMO_BYTES ?>;
+    const ext = ficheiro.name.split('.').pop().toLowerCase();
 
-    if (!tiposPermitidos.includes(ficheiro.type) && !ficheiro.name.endsWith('.txt') && !ficheiro.name.endsWith('.pdf')) {
-        mostrarNotificacao('Tipo de ficheiro não permitido. Usa PDF ou TXT.', 'erro');
+    if (!tiposPermitidos.includes(ficheiro.type) && !['pdf','txt'].includes(ext)) {
+        mostrarNotificacao('Tipo não permitido. Usa PDF ou TXT.', 'erro');
         return;
     }
     if (ficheiro.size > maxBytes) {
-        mostrarNotificacao('Ficheiro demasiado grande. Máximo <?= TAMANHO_MAXIMO_MB ?> MB.', 'erro');
+        mostrarNotificacao('Ficheiro grande demais. Máximo <?= TAMANHO_MAXIMO_MB ?> MB.', 'erro');
         return;
     }
 
-    // Mostra nome do ficheiro seleccionado
     ficheiroInfo.style.display = 'flex';
     ficheiroInfo.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="var(--cor-acento)" stroke-width="1.5"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2h6l4 4v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="var(--cor-acento)" stroke-width="1.5"/>
+        </svg>
         <span style="color:var(--cor-texto)">${ficheiro.name}</span>
         <span style="color:var(--cor-texto-3);margin-left:auto">${formatarBytes(ficheiro.size)}</span>
     `;
-
-    // Inicia upload
     enviarFicheiro(ficheiro);
 }
 
@@ -380,36 +384,133 @@ async function enviarFicheiro(ficheiro) {
     progressoTxt.textContent = 'A enviar…';
 
     const formData = new FormData();
-    formData.append('ficheiro',   ficheiro);
-    formData.append('categoria',  document.getElementById('upload-categoria').value.trim());
-    formData.append('descricao',  document.getElementById('upload-descricao').value.trim());
+    formData.append('ficheiro',  ficheiro);
+    formData.append('categoria', document.getElementById('upload-categoria').value.trim());
+    formData.append('descricao', document.getElementById('upload-descricao').value.trim());
 
     try {
         barraFill.style.width = '40%';
-        progressoTxt.textContent = 'A processar documento…';
+        progressoTxt.textContent = 'A enviar ficheiro…';
 
         const resp  = await fetch('api_upload.php', { method: 'POST', body: formData });
         const dados = await resp.json();
 
-        barraFill.style.width = '100%';
-
-        if (dados.sucesso) {
-            progressoTxt.textContent = 'Concluído!';
-            mostrarNotificacao('Documento carregado e processado com sucesso!', 'sucesso');
-            setTimeout(() => location.reload(), 1500);
-        } else {
+        if (!dados.sucesso) {
+            barraFill.style.width = '100%';
+            barraFill.style.background = 'var(--cor-erro, #f87171)';
             progressoTxt.textContent = 'Erro: ' + (dados.erro || 'Erro desconhecido');
-            mostrarNotificacao(dados.erro || 'Erro ao processar o documento.', 'erro');
+            mostrarNotificacao(dados.erro || 'Erro ao enviar.', 'erro');
+            return;
         }
+
+        // Ficheiro enviado — agora faz polling até o processamento terminar
+        barraFill.style.width = '60%';
+        progressoTxt.textContent = 'A processar documento…';
+        mostrarNotificacao('Ficheiro enviado! A processar…', 'sucesso');
+
+        // Adiciona linha temporária na tabela
+        adicionarLinhaTemp(dados.dados.id, ficheiro.name);
+
+        // Polling: verifica o estado de 3 em 3 segundos
+        await aguardarProcessamento(dados.dados.id);
+
     } catch(e) {
-        progressoTxt.textContent = 'Erro de ligação.';
-        mostrarNotificacao('Não foi possível contactar o servidor.', 'erro');
+        // "Erro de ligação" no fetch pode acontecer em localhost por timeout
+        // Mas o ficheiro JÁ foi guardado. Recarrega após 2s.
+        progressoTxt.textContent = 'A verificar estado…';
+        mostrarNotificacao('Ficheiro enviado! A verificar processamento…', 'sucesso');
+        await new Promise(r => setTimeout(r, 2000));
+        location.reload();
     }
 }
 
+async function aguardarProcessamento(id, tentativas = 0) {
+    const MAX_TENTATIVAS = 40; // 40 × 3s = 2 minutos
+    if (tentativas >= MAX_TENTATIVAS) {
+        barraFill.style.width = '100%';
+        progressoTxt.textContent = 'Tempo esgotado. Verifica o estado na lista.';
+        setTimeout(() => location.reload(), 2000);
+        return;
+    }
+
+    await new Promise(r => setTimeout(r, 3000));
+
+    try {
+        const resp  = await fetch('api_upload.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acao: 'verificar_estado', id })
+        });
+        const dados = await resp.json();
+
+        if (!dados.sucesso || !dados.dados) {
+            await aguardarProcessamento(id, tentativas + 1);
+            return;
+        }
+
+        const estado = dados.dados.estado;
+        const frags  = dados.dados.total_fragmentos;
+
+        // Actualiza linha na tabela
+        actualizarLinhaTabelaEstado(id, estado, frags);
+
+        if (estado === 'pronto') {
+            barraFill.style.width = '100%';
+            progressoTxt.textContent = `Concluído! ${frags} fragmento(s) criado(s).`;
+            mostrarNotificacao(`Documento processado com ${frags} fragmento(s)!`, 'sucesso');
+            setTimeout(() => location.reload(), 2000);
+
+        } else if (estado === 'erro') {
+            barraFill.style.width = '100%';
+            barraFill.style.background = 'var(--cor-erro, #f87171)';
+            const msg = dados.dados.mensagem_erro || 'Erro ao processar.';
+            progressoTxt.textContent = 'Erro: ' + msg;
+            mostrarNotificacao(msg, 'erro');
+            setTimeout(() => location.reload(), 3000);
+
+        } else {
+            // Ainda a_processar — continua polling
+            const progresso = Math.min(60 + tentativas * 2, 90);
+            barraFill.style.width = progresso + '%';
+            progressoTxt.textContent = `A processar… (${tentativas + 1})`;
+            await aguardarProcessamento(id, tentativas + 1);
+        }
+    } catch(e) {
+        await aguardarProcessamento(id, tentativas + 1);
+    }
+}
+
+function adicionarLinhaTemp(id, nome) {
+    const tbody = document.getElementById('corpo-tabela-docs');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.id = 'doc-' + id;
+    tr.innerHTML = `
+        <td><div class="nome-doc">${nome}</div></td>
+        <td>—</td>
+        <td id="frags-${id}">0</td>
+        <td><span class="badge badge-processar" id="badge-${id}">a_processar</span></td>
+        <td>${new Date().toLocaleDateString('pt-PT')}</td>
+        <td><button class="btn-doc btn-eliminar-doc" onclick="eliminarDoc('${id}', this)">Eliminar</button></td>
+    `;
+    tbody.insertBefore(tr, tbody.firstChild);
+}
+
+function actualizarLinhaTabelaEstado(id, estado, frags) {
+    const badge = document.getElementById('badge-' + id);
+    const fragsEl = document.getElementById('frags-' + id);
+    if (badge) {
+        badge.className = 'badge ' + ({
+            'pronto': 'badge-pronto', 'erro': 'badge-erro',
+            'a_processar': 'badge-processar', 'pendente': 'badge-pendente'
+        }[estado] || 'badge-pendente');
+        badge.textContent = estado;
+    }
+    if (fragsEl) fragsEl.textContent = frags;
+}
+
 async function reprocessar(id, btn) {
-    btn.disabled = true;
-    btn.textContent = '…';
+    btn.disabled = true; btn.textContent = '…';
     try {
         const resp  = await fetch('api_upload.php', {
             method: 'POST',
@@ -418,10 +519,11 @@ async function reprocessar(id, btn) {
         });
         const dados = await resp.json();
         if (dados.sucesso) {
-            mostrarNotificacao('Documento reprocessado!', 'sucesso');
-            setTimeout(() => location.reload(), 1200);
+            mostrarNotificacao('A reprocessar…', 'sucesso');
+            actualizarLinhaTabelaEstado(id, 'a_processar', 0);
+            await aguardarProcessamento(id);
         } else {
-            mostrarNotificacao(dados.erro || 'Erro ao reprocessar.', 'erro');
+            mostrarNotificacao(dados.erro || 'Erro.', 'erro');
             btn.disabled = false; btn.textContent = 'Reprocessar';
         }
     } catch(e) {
@@ -431,7 +533,7 @@ async function reprocessar(id, btn) {
 }
 
 async function eliminarDoc(id, btn) {
-    if (!confirm('Eliminar este documento e todos os seus fragmentos?')) return;
+    if (!confirm('Eliminar este documento e todos os fragmentos?')) return;
     btn.disabled = true; btn.textContent = '…';
     try {
         const resp  = await fetch('api_upload.php', {
@@ -441,10 +543,10 @@ async function eliminarDoc(id, btn) {
         });
         const dados = await resp.json();
         if (dados.sucesso) {
-            document.getElementById('doc-' + id).remove();
+            document.getElementById('doc-' + id)?.remove();
             mostrarNotificacao('Documento eliminado.', 'sucesso');
         } else {
-            mostrarNotificacao(dados.erro || 'Erro ao eliminar.', 'erro');
+            mostrarNotificacao(dados.erro || 'Erro.', 'erro');
             btn.disabled = false; btn.textContent = 'Eliminar';
         }
     } catch(e) {
@@ -464,7 +566,8 @@ function mostrarNotificacao(msg, tipo) {
     n.textContent = msg;
     n.className = 'notificacao ' + tipo;
     n.style.display = 'block';
-    setTimeout(() => { n.style.display = 'none'; }, 3500);
+    clearTimeout(n._timer);
+    n._timer = setTimeout(() => { n.style.display = 'none'; }, 4000);
 }
 </script>
 

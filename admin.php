@@ -42,7 +42,7 @@ if (empty($_SESSION['admin_autenticado'])):
     <title>Admin — Entrar</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/estilo.css">
+     <link rel="stylesheet" href="css/estilo.css">
     <style>
         body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
         .caixa-login {
@@ -179,7 +179,7 @@ $ultimos_docs = $stmt->fetchAll();
     <title>Admin — Painel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/estilo.css">
+    <link rel="stylesheet" href="css/estilo.css">
     <style>
         body { overflow: auto; }
         .area-chat { overflow: auto; }

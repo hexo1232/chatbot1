@@ -41,7 +41,7 @@ function formatarTamanho(int $bytes): string {
     <title>Documentos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/estilo.css">
+    <link rel="stylesheet" href="css/estilo.css">
     <style>
         body { overflow: auto; }
         .area-chat { overflow: auto; }

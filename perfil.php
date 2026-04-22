@@ -41,7 +41,7 @@ function val(array $arr, string $chave): string {
     <title>Perfil do Criador</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/estilo.css">
+    <link rel="stylesheet" href="css/estilo.css">
     <style>
         body { overflow: auto; }
         .area-chat { overflow: auto; }
@@ -296,15 +296,21 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
         });
         const dados = await resp.json();
 
-        if (dados.sucesso) {
-            mostrarNotificacao('Perfil guardado com sucesso!', 'sucesso');
-            // Actualiza avatar se URL foi fornecida
-            const url = payload.url_foto;
-            if (url) {
-                const av = document.getElementById('avatar-preview');
-                av.innerHTML = `<img src="${url}" alt="Foto" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${nome.charAt(0).toUpperCase()}'">`;
-            }
-        } else {
+     if (dados.sucesso) {
+    mostrarNotificacao('Perfil guardado com sucesso!', 'sucesso');
+
+    // Actualiza avatar se URL foi fornecida
+    const url = payload.url_foto;
+    if (url) {
+        const av = document.getElementById('avatar-preview');
+        av.innerHTML = `<img src="${url}" alt="Foto" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${nome.charAt(0).toUpperCase()}'">`;
+    }
+
+    // 🔥 REDIRECIONAMENTO PARA O DASHBOARD
+    setTimeout(() => {
+        window.location.href = 'admin.php';
+    }, 1200); // espera 1.2s para mostrar a notificação
+} else {
             mostrarNotificacao(dados.erro || 'Erro ao guardar perfil.', 'erro');
         }
     } catch(e) {

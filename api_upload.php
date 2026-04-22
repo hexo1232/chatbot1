@@ -234,9 +234,24 @@ function extrairTextoPdfFallback(string $caminho): string {
 }
 
 function limparTexto(string $t): string {
+    // 1. Remove caracteres nulos e outros caracteres de controlo que o Postgres rejeita
+    $t = str_replace(chr(0), '', $t);
+    
+    // 2. Remove sequências de bytes que não são UTF-8 válidas
+    // O modificador /u garante que o PCRE trate a string como UTF-8
+    $t = mb_convert_encoding($t, 'UTF-8', 'UTF-8');
+    
+    // 3. Remove caracteres de controlo (exceto nova linha e tabulação)
     $t = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $t);
+    
+    // 4. Remove caracteres que, embora técnicos, o Postgres às vezes rejeita em UTF-8
+    // Esta regex limpa caracteres inválidos da especificação Unicode
+    $t = preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', ' ', $t);
+
+    // 5. Normaliza espaços e quebras de linha
     $t = preg_replace('/[ \t]+/', ' ', $t);
     $t = preg_replace('/\n{3,}/', "\n\n", $t);
+    
     return trim($t);
 }
 
